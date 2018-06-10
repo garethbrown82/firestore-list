@@ -2,14 +2,47 @@ import React, { Component } from 'react';
 import { fire, firestoreDb } from './fire';
 import firebase from 'firebase';
 import { AddItem } from './AddItem';
+  
 
 class App extends Component {
-
-  onComponentDidMount() {
-    const settings = { timestampsInSnapshots: true };
-    firestoreDb.settings(settings);
+  constructor(props) {
+    super(props);
+    this.state = {
+      items: ['a', 'b', 'c']
+    }
+  }
+  
+  componentDidMount = () => {
+    firebase.auth().onAuthStateChanged(function(user) {
+      if (user) {
+        initialiseOnsnapshotListener(user.uid);
+        console.log("onAuthStateChanged: ", user);
+      } else {
+        console.log("onAuthStateChanged user logged out");
+      }
+    });
+    
+    const initialiseOnsnapshotListener = (userId) => {
+      const itemsCollection = firestoreDb.collection('users').doc(userId).collection('items');
+      itemsCollection.orderBy('timeAdded').onSnapshot((querySnapshot) => {
+        this.clearList();
+        querySnapshot.forEach((doc) => {
+          console.log("Here is the doc object: ", doc);
+          const item = doc.data().item;
+          this.setState({
+            items: this.state.items.concat(item)
+          });
+        });
+      });
+    }
   }
 
+  clearList = () => {
+    this.setState({
+      items: []
+    });
+  }
+  
   login = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
     console.log(provider);
@@ -29,12 +62,12 @@ class App extends Component {
   }
 
   logUserToConsole = () => {
-    const user = fire.auth().currentUser;
-    if (user) {
+    const currentUser = fire.auth().currentUser;
+    if (currentUser) {
       const userDetails = {
-        name: user.displayName,
-        email: user.email,
-        userId: user.uid
+        name: currentUser.displayName,
+        email: currentUser.email,
+        userId: currentUser.uid
       }
       console.log("user details: ", userDetails);
     } else {
@@ -52,7 +85,9 @@ class App extends Component {
   addItemToFirebase = (item) => {
     const currentUser = fire.auth().currentUser;
     if (currentUser) {
+      const date = new Date();
       firestoreDb.collection('users').doc(currentUser.uid).collection('items').add({
+        timeAdded: date.getTime(),
         item: item
       }).then((docRef) => {
         console.log(`Add ${docRef.id} to firebase. docRef: `, docRef);
@@ -72,6 +107,9 @@ class App extends Component {
         <button className="btn btn-link" onClick={this.logUserToConsole}>Log to console</button>
         <button className="btn btn-link" onClick={this.databaseDetails}>Database details</button>
         <AddItem addItem={this.addItemToFirebase} />
+        <ul>
+          {this.state.items.map((item, index) => <li key={index}>{item}</li>)}
+        </ul>
       </div>
     );
   }
